@@ -1,7 +1,4 @@
-pages/Landing.tsx { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { useNavigate } from 'react-router-dom';
+import { Sparkles, Mic, Upload, Brain, ArrowLeft, Zap, Shield, Globe } from 'lucide-react';
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
+export default function Landing() {

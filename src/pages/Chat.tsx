@@ -324,8 +324,9 @@ export default function Chat() {
 
       recognition.onend = () => {
         if (isLiveModeRef.current) {
+          // لا تعيد الاستماع إلا إذا كانت الحالة listening فعلاً وليس speaking أو processing
           if (liveStateRef.current === 'listening') {
-            setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 300);
+            setTimeout(() => { try { recognitionRef.current?.start(); } catch {} }, 500);
           }
           return;
         }
@@ -403,7 +404,7 @@ export default function Chat() {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
 
-      const response = await fetch(`${backendUrl}/tts`, {
+      const response = await fetch(`${backendUrl}/api/tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: cleanText }),
@@ -449,7 +450,7 @@ export default function Chat() {
           if (audioBase64) {
             const audioSrc = audioBase64.startsWith('data:')
               ? audioBase64
-              : `data:audio/wav;base64,${audioBase64}`;
+              : `data:audio/mp3;base64,${audioBase64}`;
             const audio = new Audio(audioSrc);
             audio.playbackRate = settings.ttsSpeed;
             piperAudioRef.current = audio;
@@ -660,7 +661,7 @@ export default function Chat() {
             { role: 'user', content: userContent },
           ],
           model: settings.model,
-          max_tokens: 1024,
+          max_tokens: userContent.length > 200 ? 3000 : userContent.length > 50 ? 1500 : 800,
           temperature: 0.7,
         }),
         signal: controller.signal,
@@ -930,6 +931,8 @@ export default function Chat() {
 
       setLiveState('speaking');
       setLiveResponse(reply);
+      // أوقف الميكروفون تماماً أثناء الكلام لمنع الاضطراب
+      try { recognitionRef.current?.stop(); } catch {}
       speak(reply, () => {
         if (isLiveModeRef.current) {
           setLiveState('listening'); setLiveTranscript(''); setLiveResponse('');

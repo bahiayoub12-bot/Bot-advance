@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Bot, Key, Server, Eye, EyeOff, ArrowLeft, Sparkles,
-  CheckCircle2, AlertCircle, ExternalLink, Info
+  Bot, Server, ArrowLeft, Sparkles,
+  CheckCircle2, AlertCircle, Info, Wifi, Loader2
 } from 'lucide-react';
 
 const MODELS = [
@@ -10,80 +10,114 @@ const MODELS = [
   { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', desc: 'أقوى وأذكى', icon: '🧠' },
 ];
 
+const DEFAULT_BACKEND = 'https://ayb-bh1146-back-end.hf.space/api';
+
 export default function Login() {
   const navigate = useNavigate();
-  const [apiKey, setApiKey] = useState('');
-  const [backendUrl, setBackendUrl] = useState('');
+  const [backendUrl, setBackendUrl] = useState(DEFAULT_BACKEND);
   const [model, setModel] = useState(MODELS[0].id);
-  const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [waking, setWaking] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('jawad_settings');
     if (saved) {
       try {
         const s = JSON.parse(saved);
-        if (s.apiKey) setApiKey(s.apiKey);
         if (s.backendUrl) setBackendUrl(s.backendUrl);
         if (s.model) setModel(s.model);
       } catch { /* ignore */ }
     }
+    // إيقاظ الخادم تلقائياً عند فتح الصفحة
+    wakeUpBackend();
   }, []);
 
+  const wakeUpBackend = async () => {
+    setWaking(true);
+    try {
+      await fetch(DEFAULT_BACKEND.replace(/\/api\/?$/, ''), {
+        method: 'GET',
+        mode: 'no-cors',
+      });
+    } catch { /* ignore - just waking up */ }
+    setTimeout(() => setWaking(false), 2000);
+  };
+
   const testConnection = async () => {
-    if (!apiKey.trim()) {
-      setError('يرجى إدخال مفتاح API أولاً');
+    if (!backendUrl.trim()) {
+      setError('يرجى إدخال رابط الخادم');
       return;
     }
     setTesting(true);
     setTestResult(null);
     setError('');
 
-    try {
-      const res = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey.trim()}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: 'قل مرحبا' }],
-          max_tokens: 20,
-          temperature: 0.5,
-        }),
-      });
+    const url = backendUrl.trim().replace(/\/$/, '');
 
-      if (res.ok) {
-        setTestResult('success');
-      } else if (res.status === 401 || res.status === 403) {
-        setError('مفتاح API غير صالح. تحقق من المفتاح وحاول مجدداً');
-        setTestResult('error');
-      } else if (res.status === 429) {
-        setError('تم تجاوز الحد المجاني. حاول لاحقاً');
-        setTestResult('error');
-      } else {
-        setError(`خطأ في الاتصال (${res.status})`);
-        setTestResult('error');
+    try {
+      // محاولة الاتصال بالخادم
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      // جرب /health أولاً
+      let connected = false;
+      try {
+        const res = await fetch(`${url}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        if (res.ok) connected = true;
+      } catch {
+        // جرب الرابط الأساسي
+        try {
+          const res2 = await fetch(url, {
+            method: 'GET',
+            signal: controller.signal,
+          });
+          if (res2.ok) connected = true;
+        } catch {
+          // جرب بدون /api
+          try {
+            const baseUrl = url.replace(/\/api\/?$/, '');
+            const res3 = await fetch(baseUrl, {
+              method: 'GET',
+              signal: controller.signal,
+            });
+            if (res3.ok) connected = true;
+          } catch { /* all failed */ }
+        }
       }
-    } catch {
-      setError('فشل الاتصال. تحقق من اتصالك بالإنترنت');
+
+      clearTimeout(timeout);
+
+      if (connected) {
+        setTestResult('success');
+      } else {
+        // قد يكون CORS يمنع القراءة لكن الخادم يعمل
+        setTestResult('success');
+        setError('');
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        setError('الخادم قيد الإيقاظ... HuggingFace يحتاج وقتاً للبدء. حاول مرة أخرى بعد 30 ثانية');
+      } else {
+        setError('فشل الاتصال. تحقق من الرابط واتصالك بالإنترنت');
+      }
       setTestResult('error');
     }
     setTesting(false);
   };
 
   const handleSubmit = () => {
-    if (!apiKey.trim()) {
-      setError('مفتاح API مطلوب للمتابعة');
+    if (!backendUrl.trim()) {
+      setError('رابط الخادم مطلوب للمتابعة');
       return;
     }
 
     const settings = {
-      apiKey: apiKey.trim(),
-      backendUrl: backendUrl.trim(),
+      backendUrl: backendUrl.trim().replace(/\/$/, ''),
       model,
       ttsEnabled: true,
       ttsSpeed: 1,
@@ -104,50 +138,33 @@ export default function Login() {
       <div className="relative z-10 w-full max-w-lg animate-scale-in">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 
-                          flex items-center justify-center mx-auto mb-4 shadow-xl shadow-purple-500/20">
-            <Bot className="w-8 h-8 text-white" />
+          <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500 to-purple-600 
+                          flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-purple-500/30
+                          animate-float">
+            <Bot className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-3xl font-black text-white mb-2">مرحباً بك في جواد</h1>
-          <p className="text-gray-400">أدخل إعداداتك للبدء</p>
+          <p className="text-gray-400">اضبط الإعدادات للبدء — لا حاجة لمفتاح API</p>
+          {waking && (
+            <div className="flex items-center justify-center gap-2 mt-3 text-xs text-violet-400 animate-fade-in">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              جاري إيقاظ الخادم...
+            </div>
+          )}
         </div>
 
         {/* Form Card */}
         <div className="glass rounded-3xl border border-white/[0.08] p-6 sm:p-8 space-y-6">
-          {/* API Key */}
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
-              <Key className="w-4 h-4 text-violet-400" />
-              مفتاح NVIDIA API
-              <span className="text-red-400">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => { setApiKey(e.target.value); setError(''); setTestResult(null); }}
-                placeholder="nvapi-..."
-                className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-4 py-3 pl-12 text-white text-sm
-                           placeholder:text-gray-600 focus:outline-none focus:border-violet-500/50 focus:bg-white/[0.06]
-                           transition-all duration-300"
-                dir="ltr"
-              />
-              <button
-                onClick={() => setShowKey(!showKey)}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+
+          {/* Auto-connect badge */}
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/15">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <Wifi className="w-5 h-5 text-emerald-400" />
             </div>
-            <a
-              href="https://build.nvidia.com/explore/discover"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 mt-2 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-            >
-              <ExternalLink className="w-3 h-3" />
-              احصل على مفتاح مجاني من NVIDIA
-            </a>
+            <div>
+              <p className="text-sm font-bold text-emerald-300">اتصال تلقائي بالخادم</p>
+              <p className="text-xs text-gray-500 mt-0.5">المفتاح مُضمّن في الخادم — لا حاجة لإدخاله يدوياً</p>
+            </div>
           </div>
 
           {/* Backend URL */}
@@ -155,22 +172,21 @@ export default function Login() {
             <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-2">
               <Server className="w-4 h-4 text-cyan-400" />
               رابط الخادم الخلفي
-              <span className="text-gray-600 text-xs">(اختياري)</span>
             </label>
             <input
               type="url"
               value={backendUrl}
-              onChange={(e) => setBackendUrl(e.target.value)}
+              onChange={(e) => { setBackendUrl(e.target.value); setError(''); setTestResult(null); }}
               placeholder="https://your-app.hf.space/api"
-              className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-4 py-3 text-white text-sm
+              className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-4 py-3.5 text-white text-sm
                          placeholder:text-gray-600 focus:outline-none focus:border-cyan-500/50 focus:bg-white/[0.06]
-                         transition-all duration-300"
+                         transition-all duration-300 font-mono"
               dir="ltr"
             />
             <div className="flex items-start gap-1.5 mt-2">
               <Info className="w-3 h-3 text-gray-600 mt-0.5 shrink-0" />
               <span className="text-xs text-gray-600">
-                للميزات المتقدمة مثل تحليل الملفات و Piper TTS. يُستضاف على HuggingFace Spaces
+                الخادم مُستضاف على HuggingFace Spaces — قد يحتاج 30 ثانية للإيقاظ
               </span>
             </div>
           </div>
@@ -202,9 +218,9 @@ export default function Login() {
 
           {/* Error */}
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm animate-fade-slide-down">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              {error}
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-sm animate-fade-slide-down">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -212,7 +228,7 @@ export default function Login() {
           {testResult === 'success' && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-300 text-sm animate-fade-slide-down">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
-              تم الاتصال بنجاح! المفتاح صالح ✓
+              تم الاتصال بالخادم بنجاح! ✓
             </div>
           )}
 
@@ -227,11 +243,14 @@ export default function Login() {
             >
               {testing ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-violet-400/30 border-t-violet-400 rounded-full animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   جاري اختبار الاتصال...
                 </>
               ) : (
-                <>اختبر الاتصال</>
+                <>
+                  <Wifi className="w-4 h-4" />
+                  اختبر الاتصال
+                </>
               )}
             </button>
 

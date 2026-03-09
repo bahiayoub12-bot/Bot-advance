@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Bot, MessageSquare, Mic, Settings, LogOut, Trash2,
   Brain, Plus, Clock, ChevronLeft, Volume2,
-  Server, Key, Sparkles, FileText, BarChart3, ArrowLeft
+  Server, Sparkles, FileText, BarChart3, ArrowLeft,
+  Phone, Wifi
 } from 'lucide-react';
 
 interface Conversation {
@@ -15,7 +16,6 @@ interface Conversation {
 }
 
 interface AppSettings {
-  apiKey: string;
   backendUrl: string;
   model: string;
   ttsEnabled: boolean;
@@ -30,7 +30,7 @@ const MODELS = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<AppSettings>({
-    apiKey: '', backendUrl: '', model: MODELS[0].id, ttsEnabled: true, ttsSpeed: 1,
+    backendUrl: '', model: MODELS[0].id, ttsEnabled: true, ttsSpeed: 1,
   });
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'settings'>('overview');
@@ -38,7 +38,15 @@ export default function Dashboard() {
   useEffect(() => {
     const saved = localStorage.getItem('jawad_settings');
     if (saved) {
-      try { setSettings(JSON.parse(saved)); } catch { /* ignore */ }
+      try {
+        const parsed = JSON.parse(saved);
+        setSettings({
+          backendUrl: parsed.backendUrl || '',
+          model: parsed.model || MODELS[0].id,
+          ttsEnabled: parsed.ttsEnabled !== false,
+          ttsSpeed: parsed.ttsSpeed || 1,
+        });
+      } catch { /* ignore */ }
     } else {
       navigate('/login');
     }
@@ -68,11 +76,14 @@ export default function Dashboard() {
   const currentModel = MODELS.find(m => m.id === settings.model) || MODELS[0];
   const totalMessages = conversations.reduce((sum, c) => sum + c.messageCount, 0);
 
+  // تحقق من حالة الاتصال
+  const isConnected = !!settings.backendUrl;
+
   const statCards = [
     { icon: <MessageSquare className="w-6 h-6" />, label: 'المحادثات', value: conversations.length, color: 'from-violet-500 to-purple-500', bg: 'bg-violet-500/10' },
     { icon: <BarChart3 className="w-6 h-6" />, label: 'الرسائل', value: totalMessages, color: 'from-cyan-500 to-blue-500', bg: 'bg-cyan-500/10' },
     { icon: <Brain className="w-6 h-6" />, label: 'النموذج', value: currentModel.name, color: 'from-amber-500 to-orange-500', bg: 'bg-amber-500/10' },
-    { icon: <Server className="w-6 h-6" />, label: 'الخادم', value: settings.backendUrl ? 'متصل' : 'محلي', color: 'from-emerald-500 to-green-500', bg: 'bg-emerald-500/10' },
+    { icon: <Server className="w-6 h-6" />, label: 'الخادم', value: isConnected ? 'متصل ✓' : 'غير متصل', color: 'from-emerald-500 to-green-500', bg: 'bg-emerald-500/10' },
   ];
 
   return (
@@ -154,14 +165,24 @@ export default function Dashboard() {
                 <div className="text-center sm:text-right flex-1">
                   <h2 className="text-2xl font-black text-white mb-2">أهلاً بك في جواد!</h2>
                   <p className="text-gray-400 mb-4">مساعدك الذكي جاهز للمحادثة. ابدأ محادثة جديدة أو تابع من حيث توقفت</p>
-                  <button
-                    onClick={startNewChat}
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 
-                               text-white font-bold hover:shadow-lg hover:shadow-purple-500/25 transition-all hover:scale-105"
-                  >
-                    <Mic className="w-5 h-5" />
-                    ابدأ محادثة صوتية
-                  </button>
+                  <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
+                    <button
+                      onClick={startNewChat}
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 
+                                 text-white font-bold hover:shadow-lg hover:shadow-purple-500/25 transition-all hover:scale-105"
+                    >
+                      <Mic className="w-5 h-5" />
+                      محادثة نصية وصوتية
+                    </button>
+                    <button
+                      onClick={startNewChat}
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-emerald-500/30
+                                 text-emerald-300 font-bold hover:bg-emerald-500/10 transition-all"
+                    >
+                      <Phone className="w-5 h-5" />
+                      دردشة صوتية مباشرة
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -189,33 +210,48 @@ export default function Dashboard() {
             {/* Quick Actions */}
             <div>
               <h3 className="text-lg font-bold text-white mb-4">إجراءات سريعة</h3>
-              <div className="grid sm:grid-cols-3 gap-4">
-                <button
-                  onClick={startNewChat}
-                  className="group p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
-                             hover:bg-violet-500/5 hover:border-violet-500/20 transition-all text-right"
-                >
-                  <MessageSquare className="w-6 h-6 text-violet-400 mb-3 group-hover:scale-110 transition-transform" />
-                  <div className="font-bold text-white mb-1">محادثة نصية</div>
-                  <div className="text-xs text-gray-500">اكتب سؤالك وتحدث مع جواد</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <button onClick={startNewChat}
+                  className="group p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
+                             hover:bg-violet-500/5 hover:border-violet-500/20 transition-all text-center">
+                  <MessageSquare className="w-6 h-6 text-violet-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                  <div className="text-sm font-bold text-white mb-0.5">محادثة</div>
+                  <div className="text-[10px] text-gray-500">نصية وصوتية</div>
                 </button>
-                <button
-                  onClick={startNewChat}
-                  className="group p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
-                             hover:bg-red-500/5 hover:border-red-500/20 transition-all text-right"
-                >
-                  <Mic className="w-6 h-6 text-red-400 mb-3 group-hover:scale-110 transition-transform" />
-                  <div className="font-bold text-white mb-1">محادثة صوتية</div>
-                  <div className="text-xs text-gray-500">تحدث بصوتك باللغة العربية</div>
+                <button onClick={startNewChat}
+                  className="group p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
+                             hover:bg-emerald-500/5 hover:border-emerald-500/20 transition-all text-center">
+                  <Phone className="w-6 h-6 text-emerald-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                  <div className="text-sm font-bold text-white mb-0.5">مباشرة</div>
+                  <div className="text-[10px] text-gray-500">مكالمة صوتية</div>
                 </button>
-                <button
-                  onClick={startNewChat}
-                  className="group p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
-                             hover:bg-cyan-500/5 hover:border-cyan-500/20 transition-all text-right"
-                >
-                  <FileText className="w-6 h-6 text-cyan-400 mb-3 group-hover:scale-110 transition-transform" />
-                  <div className="font-bold text-white mb-1">تحليل ملف</div>
-                  <div className="text-xs text-gray-500">ارفع PDF أو صورة للتحليل</div>
+                <button onClick={startNewChat}
+                  className="group p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
+                             hover:bg-red-500/5 hover:border-red-500/20 transition-all text-center">
+                  <FileText className="w-6 h-6 text-red-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                  <div className="text-sm font-bold text-white mb-0.5">PDF</div>
+                  <div className="text-[10px] text-gray-500">PyPDF تحليل</div>
+                </button>
+                <button onClick={startNewChat}
+                  className="group p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
+                             hover:bg-cyan-500/5 hover:border-cyan-500/20 transition-all text-center">
+                  <BarChart3 className="w-6 h-6 text-cyan-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                  <div className="text-sm font-bold text-white mb-0.5">بيانات</div>
+                  <div className="text-[10px] text-gray-500">Pandas تحليل</div>
+                </button>
+                <button onClick={startNewChat}
+                  className="group p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
+                             hover:bg-amber-500/5 hover:border-amber-500/20 transition-all text-center">
+                  <Wifi className="w-6 h-6 text-amber-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                  <div className="text-sm font-bold text-white mb-0.5">ويب</div>
+                  <div className="text-[10px] text-gray-500">Scrapling استخراج</div>
+                </button>
+                <button onClick={startNewChat}
+                  className="group p-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] 
+                             hover:bg-pink-500/5 hover:border-pink-500/20 transition-all text-center">
+                  <Plus className="w-6 h-6 text-pink-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                  <div className="text-sm font-bold text-white mb-0.5">DICOM</div>
+                  <div className="text-[10px] text-gray-500">صور طبية</div>
                 </button>
               </div>
             </div>
@@ -375,24 +411,23 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* API */}
+            {/* Connection */}
             <div className="p-6 rounded-2xl border border-white/[0.06] bg-white/[0.02]">
               <h4 className="flex items-center gap-2 font-bold text-white mb-4">
-                <Key className="w-5 h-5 text-amber-400" />
-                الاتصال
+                <Wifi className="w-5 h-5 text-emerald-400" />
+                الاتصال بالخادم
               </h4>
               <div className="space-y-3">
                 <div>
-                  <label className="text-sm text-gray-400 mb-1 block">مفتاح API</label>
-                  <div className="text-sm text-gray-500 bg-white/[0.03] rounded-lg px-3 py-2 font-mono" dir="ltr">
-                    {settings.apiKey ? `${settings.apiKey.slice(0, 10)}...${settings.apiKey.slice(-4)}` : 'غير محدد'}
+                  <label className="text-sm text-gray-400 mb-1 block">رابط الخادم الخلفي</label>
+                  <div className="text-sm text-gray-400 bg-white/[0.03] rounded-lg px-3 py-2.5 font-mono flex items-center gap-2" dir="ltr">
+                    {isConnected && <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />}
+                    {settings.backendUrl || 'غير محدد'}
                   </div>
                 </div>
-                <div>
-                  <label className="text-sm text-gray-400 mb-1 block">الخادم الخلفي</label>
-                  <div className="text-sm text-gray-500 bg-white/[0.03] rounded-lg px-3 py-2 font-mono" dir="ltr">
-                    {settings.backendUrl || 'غير متصل (وضع API مباشر)'}
-                  </div>
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <Server className="w-3 h-3" />
+                  <span>المفتاح مُضمّن في الخادم — لا حاجة لإدخاله يدوياً</span>
                 </div>
               </div>
               <button

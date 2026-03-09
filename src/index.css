@@ -203,6 +203,18 @@ input[type="range"]::-moz-range-thumb {
 .msg-user { animation: fadeSlideLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .msg-bot { animation: fadeSlideRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
 
+/* Live voice chat ring animations */
+@keyframes live-ring-1 {
+  0%, 100% { transform: scale(1); opacity: 0.15; }
+  50% { transform: scale(1.15); opacity: 0.3; }
+}
+@keyframes live-ring-2 {
+  0%, 100% { transform: scale(1); opacity: 0.1; }
+  50% { transform: scale(1.25); opacity: 0.2; }
+}
+.live-ring-1 { animation: live-ring-1 3s ease-in-out infinite; }
+.live-ring-2 { animation: live-ring-2 3s ease-in-out 0.5s infinite; }
+
 /* Dot typing indicator */
 .typing-dot {
   width: 8px; height: 8px;
